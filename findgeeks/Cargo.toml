@@ -1,0 +1,10 @@
+[package]
+name = "findgeeks"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+lambda_runtime = "1.4.0"
+serde_json = "1.0.151"
+tokio = { version = "1", features = ["macros"] }
+sqlx = { version = "0", features = ["mysql", "runtime-tokio-rustls"] }
