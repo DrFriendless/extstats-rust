@@ -8,3 +8,7 @@ lambda_runtime = "1.4.0"
 serde_json = "1.0.151"
 tokio = { version = "1", features = ["macros"] }
 sqlx = { version = "0", features = ["mysql", "runtime-tokio-rustls"] }
+regex = "1.13.1"
+
+[lints.rust]
+linker_messages = "allow"

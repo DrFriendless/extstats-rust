@@ -1,8 +1,8 @@
 use lambda_runtime::{LambdaEvent, Error, service_fn};
-use serde_json::Value;
+use serde_json::{json, Value};
 use sqlx::{MySql, MySqlPool, Row};
 use std::env::var;
-use serde_json::Value::String;
+use regex::Regex;
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
@@ -12,15 +12,21 @@ async fn main() -> Result<(), Error> {
 // https://github.com/aws/aws-lambda-rust-runtime
 pub(crate) async fn handler(event: LambdaEvent<Value>) -> Result<Value, Error> {
     let (event, _context) = event.into_parts();
-    // println!("{:?}", event);
-    let fragment = event["queryStringParameters"]["fragment"].as_str().unwrap_or("");
-    let fpercent = format!("{fragment}%");
-    let percentfpercent = format!("%{fragment}%");
+    let raw_path: &str = event["rawPath"].as_str().unwrap_or("/r").into();
 
-    let sql = "select username from geeks where LOWER(username) like ? order by 1 limit 10";
-    let rpool = get_pool().await;
-    if rpool.is_ok() {
-        let pool: sqlx::Pool<MySql> = rpool?;
+    if raw_path.eq("/r/findgeeks") {
+        let re = Regex::new(r"[^A-Za-z0-9 _!-]+")?;
+        println!("{:?}", event);
+        let fragment = re.replace_all(event["queryStringParameters"]["fragment"].as_str().unwrap_or(""), "").to_string();
+        let fpercent = format!("{fragment}%");
+        let percentfpercent = format!("%{fragment}%");
+
+        let pool_r = get_pool().await;
+        if pool_r.is_err() {
+            return Ok(json!({ "statusCode": 500, "body": "Unable to connect to database" }));
+        }
+        let pool: sqlx::Pool<MySql> = pool_r?;
+        let sql = "select username from geeks where LOWER(username) like ? order by 1 limit 10";
         let mut matches: Vec<sqlx::mysql::MySqlRow> = sqlx::query(sql).bind(fpercent).fetch_all(&pool).await?;
         if matches.is_empty() {
             matches = sqlx::query(sql).bind(percentfpercent).fetch_all(&pool).await?;
@@ -38,9 +44,38 @@ pub(crate) async fn handler(event: LambdaEvent<Value>) -> Result<Value, Error> {
         }
         parts.push("]");
         let result = parts.join("");
-        Ok(String(result))
+        Ok(json!({
+            "statusCode": 200,
+            "body": result
+        }))
+    } else if raw_path.eq("/r/finddesigner") {
+        let bggid_s = event["queryStringParameters"]["bggid"].as_str().unwrap_or("");
+        let bggid_r = bggid_s.parse::<i32>();
+        if bggid_r.is_err() {
+            return Ok(json!({ "statusCode": 400, "body": "Bad bggid parameter" }));
+        }
+        let pool_r = get_pool().await;
+        if pool_r.is_err() {
+            return Ok(json!({ "statusCode": 500, "body": "Unable to connect to database" }));
+        }
+        let bggid = bggid_r.unwrap();
+        let row = sqlx::query("select bggid, name from designers where bggid = ?")
+            .bind(bggid)
+            .fetch_optional(&pool_r.unwrap())
+            .await?;
+        let result: Value = match row {
+            Some(row) => json!({ "bggid": bggid, "name": row.get::<String, _>("name") }),
+            None => json!({}),
+        };
+        Ok(json!({
+            "statusCode": 200,
+            "body": result.to_string()
+        }))
     } else {
-        Err(rpool.unwrap_err().into())
+        Ok(json!({
+            "statusCode": 404,
+            "body": "Path not found"
+        }))
     }
 }
 
