@@ -24,119 +24,134 @@ async fn main() -> Result<(), Error> {
 pub(crate) async fn handler(pool: &MySqlPool, event: LambdaEvent<Value>) -> Result<Value, Error> {
     let (event, _context) = event.into_parts();
     let raw_path: &str = event["rawPath"].as_str().unwrap_or("/r").into();
+    let method = event["requestContext"]["http"]["method"].as_str().unwrap_or("");
+    println!("{event}");
 
-    if raw_path.eq("/r/findgeeks") {
-        increment_rust_counter(pool).await?;
-        let fragment = CLEAN_GEEK.replace_all(event["queryStringParameters"]["fragment"].as_str().unwrap_or(""), "").to_lowercase();
-        let fpercent = format!("{fragment}%");
-        let percentfpercent = format!("%{fragment}%");
+    if method == "GET" {
+        if raw_path.eq("/r/findgeeks") {
+            increment_rust_counter(pool).await?;
+            let fragment = CLEAN_GEEK.replace_all(event["queryStringParameters"]["fragment"].as_str().unwrap_or(""), "").to_lowercase();
+            let fpercent = format!("{fragment}%");
+            let percentfpercent = format!("%{fragment}%");
 
-        let sql = "select username from geeks where LOWER(username) like ? order by 1 limit 10";
-        let mut matches: Vec<String> = sqlx::query_scalar(sql).bind(fpercent).fetch_all(pool).await?;
-        if matches.is_empty() {
-            matches = sqlx::query_scalar(sql).bind(percentfpercent).fetch_all(pool).await?;
-        }
-        let result = serde_json::to_string(&matches)?;
-        Ok(json!({
-            "statusCode": 200,
-            "body": result,
-            "headers": { "content-type": "application/json" },
-        }))
-    } else if raw_path.eq("/r/finddesigner") {
-        increment_rust_counter(pool).await?;
-        let bggid = match get_bggid_param(&event) {
-            Ok(value) => value,
-            Err(value) => return Ok(value),
-        };
-        let sql = "select name from designers where bggid = ?";
-        let row: Option<String> = sqlx::query_scalar(sql)
-            .bind(bggid)
-            .fetch_optional(pool)
-            .await?;
-        let result: Value = match row {
-            Some(name) => json!({ "bggid": bggid, "name": name }),
-            None => json!({}),
-        };
-        Ok(json!({
-            "statusCode": 200,
-            "body": result.to_string(),
-            "headers": { "content-type": "application/json" },
-        }))
-    } else if raw_path.eq("/r/finddesigners") {
-        increment_rust_counter(pool).await?;
-        let sql = "select name from designers where LOWER(name) like ? order by 1 limit 10";
-        let fragment = CLEAN_DESIGNER.replace_all(event["queryStringParameters"]["fragment"].as_str().unwrap_or(""), "").to_lowercase();
-        let fpercent = format!("{fragment}%");
-        let percentfpercent = format!("%{fragment}%");
-
-        let mut matches: Vec<String> = sqlx::query_scalar(sql).bind(fpercent).fetch_all(pool).await?;
-        if matches.is_empty() { matches = sqlx::query_scalar(sql).bind(percentfpercent).fetch_all(pool).await?; }
-        let result = serde_json::to_string(&matches)?;
-
-        Ok(json!({
-            "statusCode": 200,
-            "body": result,
-            "headers": { "content-type": "application/json" }
-        }))
-    } else if raw_path.eq("/r/findpublisher") {
-        increment_rust_counter(pool).await?;
-        let bggid = match get_bggid_param(&event) {
-            Ok(value) => value,
-            Err(value) => return Ok(value),
-        };
-        println!("bggid: {}", bggid);
-
-        let sql = "select name from publishers where bggid = ?";
-        let row: Option<String> = sqlx::query_scalar(sql)
-            .bind(bggid)
-            .fetch_optional(pool)
-            .await?;
-        let result: Value = match row {
-            Some(row) => json!({ "bggid": bggid, "name": row }),
-            None => json!({}),
-        };
-        println!("{:?}", result);
-        Ok(json!({
-            "statusCode": 200,
-            "body": result.to_string(),
-            "headers": { "content-type": "application/json" }
-        }))
-    } else if raw_path.eq("/r/findpublishers") {
-        increment_rust_counter(pool).await?;
-        let sql = "select name from publishers where LOWER(name) like ? order by 1 limit 10";
-        let fragment = CLEAN_DESIGNER.replace_all(event["queryStringParameters"]["fragment"].as_str().unwrap_or(""), "").to_lowercase();
-        let fpercent = format!("{fragment}%");
-        let percentfpercent = format!("%{fragment}%");
-
-        let mut matches: Vec<String> = sqlx::query_scalar(sql).bind(fpercent).fetch_all(pool).await?;
-        if matches.is_empty() { matches = sqlx::query_scalar(sql).bind(percentfpercent).fetch_all(pool).await?; }
-        let result = serde_json::to_string(&matches)?;
-
-        Ok(json!({
-            "statusCode": 200,
-            "body": result,
-            "headers": { "content-type": "application/json" }
-        }))
-    } else if raw_path.eq("/r/count") {
-        increment_rust_counter(pool).await?;
-        let fragment = event["queryStringParameters"]["counts"].as_str().unwrap_or("").to_lowercase();
-        for frag in fragment.split(',') {
-            match frag {
-                "page" => { increment_page_views(pool).await?; },
-                "blog" => { increment_blog_views(pool).await?; },
-                "doco" => { increment_doco_views(pool).await?; },
-                "adv" => { increment_adventure_views(pool).await?; },
-                _ => { continue; }
+            let sql = "select username from geeks where LOWER(username) like ? order by 1 limit 10";
+            let mut matches: Vec<String> = sqlx::query_scalar(sql).bind(fpercent).fetch_all(pool).await?;
+            if matches.is_empty() {
+                matches = sqlx::query_scalar(sql).bind(percentfpercent).fetch_all(pool).await?;
             }
-        }
-        Ok(json!({
-            "statusCode": 200,
-            "headers": { "content-type": "application/json" }
-        }))
-    } else {
-        Ok(json!({
+            let result = serde_json::to_string(&matches)?;
+            Ok(json!({
+                "statusCode": 200,
+                "body": result,
+                "headers": { "content-type": "application/json" },
+            }))
+        } else if raw_path.eq("/r/finddesigner") {
+            increment_rust_counter(pool).await?;
+            let bggid = match get_bggid_param(&event) {
+                Ok(value) => value,
+                Err(value) => return Ok(value),
+            };
+            let sql = "select name from designers where bggid = ?";
+            let row: Option<String> = sqlx::query_scalar(sql)
+                .bind(bggid)
+                .fetch_optional(pool)
+                .await?;
+            let result: Value = match row {
+                Some(name) => json!({ "bggid": bggid, "name": name }),
+                None => json!({}),
+            };
+            Ok(json!({
+                "statusCode": 200,
+                "body": result.to_string(),
+                "headers": { "content-type": "application/json" },
+            }))
+        } else if raw_path.eq("/r/finddesigners") {
+            increment_rust_counter(pool).await?;
+            let sql = "select name from designers where LOWER(name) like ? order by 1 limit 10";
+            let fragment = CLEAN_DESIGNER.replace_all(event["queryStringParameters"]["fragment"].as_str().unwrap_or(""), "").to_lowercase();
+            let fpercent = format!("{fragment}%");
+            let percentfpercent = format!("%{fragment}%");
+
+            let mut matches: Vec<String> = sqlx::query_scalar(sql).bind(fpercent).fetch_all(pool).await?;
+            if matches.is_empty() { matches = sqlx::query_scalar(sql).bind(percentfpercent).fetch_all(pool).await?; }
+            let result = serde_json::to_string(&matches)?;
+
+            Ok(json!({
+                "statusCode": 200,
+                "body": result,
+                "headers": { "content-type": "application/json" }
+            }))
+        } else if raw_path.eq("/r/findpublisher") {
+            increment_rust_counter(pool).await?;
+            let bggid = match get_bggid_param(&event) {
+                Ok(value) => value,
+                Err(value) => return Ok(value),
+            };
+
+            let sql = "select name from publishers where bggid = ?";
+            let row: Option<String> = sqlx::query_scalar(sql)
+                .bind(bggid)
+                .fetch_optional(pool)
+                .await?;
+            let result: Value = match row {
+                Some(row) => json!({ "bggid": bggid, "name": row }),
+                None => json!({}),
+            };
+
+            Ok(json!({
+                "statusCode": 200,
+                "body": result.to_string(),
+                "headers": { "content-type": "application/json" }
+            }))
+        } else if raw_path.eq("/r/findpublishers") {
+            increment_rust_counter(pool).await?;
+            let sql = "select name from publishers where LOWER(name) like ? order by 1 limit 10";
+            let fragment = CLEAN_DESIGNER.replace_all(event["queryStringParameters"]["fragment"].as_str().unwrap_or(""), "").to_lowercase();
+            let fpercent = format!("{fragment}%");
+            let percentfpercent = format!("%{fragment}%");
+
+            let mut matches: Vec<String> = sqlx::query_scalar(sql).bind(fpercent).fetch_all(pool).await?;
+            if matches.is_empty() { matches = sqlx::query_scalar(sql).bind(percentfpercent).fetch_all(pool).await?; }
+            let result = serde_json::to_string(&matches)?;
+
+            Ok(json!({
+                "statusCode": 200,
+                "body": result,
+                "headers": { "content-type": "application/json" }
+            }))
+        } else {
+            Ok(json!({
             "statusCode": 404,
             "body": "Path not found"
+        }))
+        }
+    } else if method == "POST" {
+        if raw_path.eq("/r/count") {
+            increment_rust_counter(pool).await?;
+            let fragment = event["queryStringParameters"]["counts"].as_str().unwrap_or("").to_lowercase();
+            for frag in fragment.split(',') {
+                match frag {
+                    "page" => { increment_page_views(pool).await?; },
+                    "blog" => { increment_blog_views(pool).await?; },
+                    "doco" => { increment_doco_views(pool).await?; },
+                    "adv" => { increment_adventure_views(pool).await?; },
+                    _ => { continue; }
+                }
+            }
+            Ok(json!({
+            "statusCode": 200,
+            "headers": { "content-type": "application/json" }
+        }))
+        } else {
+            Ok(json!({
+            "statusCode": 404,
+            "body": "Path not found"
+        }))
+        }
+    } else {
+        Ok(json!({
+            "statusCode": 400,
+            "body": "Unused method"
         }))
     }
 }
